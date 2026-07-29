@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>RSGA Guardian — Data Watch</title>
+<meta name="theme-color" content="#0A0F1C">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --bg:#0A0F1C; --panel:#131B2E; --panel-2:#0F1626; --border:#1F2A44;
+    --text:#E8EDF7; --muted:#7C8AA8; --dim:#4C5A78;
+    --ok:#22C55E; --warn:#F59E0B; --danger:#EF4444; --brand:#38BDF8;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:'Space Grotesk',system-ui,sans-serif;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  body{padding-bottom:100px;}
+
+  header{position:sticky;top:0;z-index:10;background:rgba(10,15,28,.92);
+    backdrop-filter:blur(10px);border-bottom:1px solid var(--border);
+    padding:16px 18px 14px;}
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand-mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(160deg,var(--brand),#1D4ED8);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 0 1px rgba(56,189,248,.3),0 4px 14px rgba(56,189,248,.25);}
+  .brand-mark svg{width:18px;height:18px;}
+  .brand h1{font-size:16px;font-weight:700;margin:0;letter-spacing:.2px;}
+  .brand p{margin:1px 0 0;font-size:11.5px;color:var(--muted);}
+
+  main{padding:16px 16px 4px;max-width:640px;margin:0 auto;}
+
+  .status-card{background:var(--panel);border:1px solid var(--border);border-radius:16px;
+    padding:18px;margin-bottom:16px;position:relative;overflow:hidden;}
+  .status-row{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .status-left{display:flex;align-items:center;gap:12px;}
+  .pulse-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;position:relative;}
+  .pulse-dot::after{content:'';position:absolute;inset:-6px;border-radius:50%;opacity:.35;animation:ping 2.2s ease-out infinite;}
+  .pulse-dot.ok{background:var(--ok);} .pulse-dot.ok::after{background:var(--ok);}
+  .pulse-dot.warn{background:var(--warn);} .pulse-dot.warn::after{background:var(--warn);}
+  .pulse-dot.danger{background:var(--danger);} .pulse-dot.danger::after{background:var(--danger);}
+  @keyframes ping{0%{transform:scale(.6);opacity:.5;}100%{transform:scale(2.2);opacity:0;}}
+  .status-title{font-size:15px;font-weight:600;}
+  .status-sub{font-size:12px;color:var(--muted);margin-top:2px;}
+  .status-time{text-align:right;}
+  .status-time .n{font-size:13px;font-weight:600;}
+  .status-time .l{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;}
+
+  .alert-banner{margin-top:14px;padding:12px 14px;border-radius:12px;font-size:12.5px;
+    background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);color:#FCA5A5;line-height:1.5;}
+  .alert-banner b{color:#FEE2E2;}
+
+  .btn-row{display:flex;gap:10px;margin-top:16px;}
+  .btn{flex:1;border:none;border-radius:11px;padding:12px 10px;font-family:inherit;
+    font-weight:600;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;}
+  .btn-primary{background:var(--brand);color:#03131E;}
+  .btn-ghost{background:var(--panel-2);color:var(--text);border:1px solid var(--border);}
+  .btn:active{transform:scale(.97);}
+  .btn:disabled{opacity:.5;}
+
+  .section-label{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);
+    margin:22px 4px 10px;font-weight:600;}
+
+  .counts-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+  .count-tile{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 14px;}
+  .count-tile .k{font-size:11px;color:var(--muted);}
+  .count-tile .v{font-size:20px;font-weight:700;margin-top:2px;}
+  .count-tile .d{font-size:10.5px;margin-top:2px;}
+  .d.up{color:var(--ok);} .d.down{color:var(--danger);} .d.flat{color:var(--dim);}
+
+  .timeline{position:relative;padding-left:22px;}
+  .timeline::before{content:'';position:absolute;left:5px;top:6px;bottom:6px;width:2px;background:var(--border);}
+  .snap{position:relative;margin-bottom:14px;}
+  .snap-node{position:absolute;left:-22px;top:4px;width:12px;height:12px;border-radius:50%;border:2px solid var(--bg);}
+  .snap-node.ok{background:var(--ok);} .snap-node.warn{background:var(--warn);} .snap-node.danger{background:var(--danger);}
+  .snap-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 14px;}
+  .snap-top{display:flex;justify-content:space-between;align-items:baseline;}
+  .snap-time{font-size:12.5px;font-weight:600;}
+  .snap-ago{font-size:10.5px;color:var(--dim);}
+  .snap-counts{margin-top:6px;font-size:11.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:8px;}
+  .snap-counts span b{color:var(--text);}
+  .snap-actions{margin-top:10px;display:flex;gap:8px;}
+  .mini-btn{font-size:11px;padding:6px 10px;border-radius:8px;background:var(--panel-2);
+    border:1px solid var(--border);color:var(--brand);cursor:pointer;font-family:inherit;font-weight:600;}
+  .mini-btn:active{transform:scale(.96);}
+
+  .empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px;line-height:1.6;}
+
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:#1E293B;border:1px solid var(--border);color:var(--text);padding:11px 18px;
+    border-radius:10px;font-size:12.5px;opacity:0;transition:all .25s ease;z-index:50;
+    box-shadow:0 8px 24px rgba(0,0,0,.4);pointer-events:none;max-width:88%;text-align:center;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  .footnote{font-size:11px;color:var(--dim);text-align:center;padding:22px 20px 30px;line-height:1.6;}
+
+  /* modal for raw JSON view */
+  .modal-bg{position:fixed;inset:0;background:rgba(5,8,15,.75);z-index:40;display:none;
+    align-items:flex-end;justify-content:center;}
+  .modal-bg.show{display:flex;}
+  .modal{background:var(--panel);border:1px solid var(--border);border-radius:16px 16px 0 0;
+    width:100%;max-width:640px;max-height:78vh;display:flex;flex-direction:column;}
+  .modal-head{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;
+    justify-content:space-between;align-items:center;}
+  .modal-head h3{font-size:14px;margin:0;}
+  .modal-close{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;}
+  .modal-body{padding:14px 16px;overflow:auto;}
+  .modal-body pre{font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-word;
+    color:#C7D2E8;margin:0;}
+  .modal-foot{padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2L4 5V11C4 16.5 7.4 21.2 12 22.5C16.6 21.2 20 16.5 20 11V5L12 2Z" stroke="#031320" stroke-width="1.8" stroke-linejoin="round" fill="none"/>
+        <path d="M9 12.2L11.2 14.4L15.3 9.8" stroke="#031320" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div>
+      <h1>RSGA Guardian</h1>
+      <p>Read-only data watch for R.S. Global Academy ERP</p>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <div class="status-card">
+    <div class="status-row">
+      <div class="status-left">
+        <div class="pulse-dot ok" id="statusDot"></div>
+        <div>
+          <div class="status-title" id="statusTitle">Checking live data…</div>
+          <div class="status-sub" id="statusSub">Connecting to Firestore</div>
+        </div>
+      </div>
+      <div class="status-time">
+        <div class="n mono" id="lastBackupTime">—</div>
+        <div class="l">last watch</div>
+      </div>
+    </div>
+    <div class="alert-banner" id="alertBanner" style="display:none;"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="backupNowBtn">⟳ Backup now</button>
+      <button class="btn btn-ghost" id="exportAllBtn">↓ Export all</button>
+    </div>
+  </div>
+
+  <div class="section-label">Current record counts</div>
+  <div class="counts-grid" id="countsGrid">
+    <div class="count-tile"><div class="k">Loading…</div><div class="v">—</div></div>
+  </div>
+
+  <div class="section-label">Local storage backup (this device)</div>
+  <div id="lsCard" class="snap-card" style="margin-bottom:4px;">
+    <div class="empty" style="padding:20px;">Loading…</div>
+  </div>
+  <div class="footnote" style="padding:8px 4px 0;text-align:left;">
+    Works only if this Guardian page is opened on the <b style="color:var(--muted);">same domain</b> as the ERP
+    (localStorage is per-origin). If the keys below look empty, open Guardian from that same site.
+  </div>
+
+  <div class="section-label">Backup history <span class="mono" id="histCount" style="color:var(--dim);"></span></div>
+  <div class="timeline" id="timeline">
+    <div class="empty">No backups saved on this device yet.<br>Tap "Backup now" to take the first snapshot.</div>
+  </div>
+
+  <div class="footnote">
+    Snapshots are stored only in this browser's local storage (IndexedDB) — they are not uploaded anywhere.
+    Guardian only <b style="color:var(--muted);">reads</b> from Firestore, it never writes or deletes.
+    It watches while this page is open; it can't run in the background, so open it once a day
+    (or whenever you make big changes) to keep the history useful.
+  </div>
+
+</main>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modalTitle">Snapshot JSON</h3>
+      <button class="modal-close" id="modalClose">×</button>
+    </div>
+    <div class="modal-body"><pre id="modalPre"></pre></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="modalCopy" style="flex:1;">Copy JSON</button>
+      <button class="btn btn-primary" id="modalDownload" style="flex:1;">Download .json</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ---------- Firebase (same project as RSGA ERP — read-only usage) ----------
+const firebaseConfig = {
+  apiKey:            "AIzaSyD_i6cdAREp8sHoWvVcM_0anX8vVV36uco",
+  authDomain:        "rsga-fa89f.firebaseapp.com",
+  projectId:         "rsga-fa89f",
+  storageBucket:     "rsga-fa89f.firebasestorage.app",
+  messagingSenderId: "552424921107",
+  appId:             "1:552424921107:web:5bdb99629f5917236207e6"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ---------- IndexedDB (rolling local backup history) ----------
+const IDB_NAME = 'rsga_guardian_db';
+const IDB_STORE = 'snapshots';
+const IDB_GOLDEN_STORE = 'golden'; // permanently pinned high-water-mark per watched key
+const MAX_SNAPSHOTS = 60; // rolling window (regular snapshots only — golden is never trimmed)
+
+function idbOpen(){
+  return new Promise((resolve, reject)=>{
+    const req = indexedDB.open(IDB_NAME, 2);
+    req.onupgradeneeded = ()=>{
+      const d = req.result;
+      if(!d.objectStoreNames.contains(IDB_STORE)){
+        d.createObjectStore(IDB_STORE, {keyPath:'ts'});
+      }
+      if(!d.objectStoreNames.contains(IDB_GOLDEN_STORE)){
+        d.createObjectStore(IDB_GOLDEN_STORE, {keyPath:'key'});
+      }
+    };
+    req.onsuccess = ()=>resolve(req.result);
+    req.onerror = ()=>reject(req.error);
+  });
+}
+
+// ---------- Golden Backup: permanent high-water-mark per watched key ----------
+async function idbGetAllGolden(){
+  const d = await idbOpen();
+  return new Promise((resolve,reject)=>{
+    const tx = d.transaction(IDB_GOLDEN_STORE,'readonly');
+    const req = tx.objectStore(IDB_GOLDEN_STORE).getAll();
+    req.onsuccess = ()=>{
+      const map = {};
+      (req.result||[]).forEach(g=> map[g.key]=g);
+      resolve(map);
+    };
+    req.onerror = ()=>reject(req.error);
+  });
+}
+async function idbPutGolden(entry){
+  const d = await idbOpen();
+  return new Promise((resolve,reject)=>{
+    const tx = d.transaction(IDB_GOLDEN_STORE,'readwrite');
+    tx.objectStore(IDB_GOLDEN_STORE).put(entry);
+    tx.oncomplete = ()=>resolve();
+    tx.onerror = ()=>reject(tx.error);
+  });
+}
+// Reads the current golden map, and — only where the NEW count is strictly higher —
+// pins a fresh golden snapshot for that key. Never overwritten by an equal or lower count,
+// no matter what Firestore returns. Returns the peak counts as they stood BEFORE this run's
+// update, so this run still compares against the true baseline (a same-run drop still trips
+// the alert even for keys that happen to grow elsewhere).
+async function updateGoldenBaseline(counts, data){
+  const before = await idbGetAllGolden();
+  for(const k of WATCH_KEYS){
+    const newCount = counts[k] ?? 0;
+    const existing = before[k];
+    if(!existing || newCount > existing.count){
+      await idbPutGolden({ key:k, count:newCount, ts:Date.now(), data: data[k] ?? null });
+    }
+  }
+  return before;
+}
+async function idbPut(snap){
+  const d = await idbOpen();
+  return new Promise((resolve,reject)=>{
+    const tx = d.transaction(IDB_STORE,'readwrite');
+    tx.objectStore(IDB_STORE).put(snap);
+    tx.oncomplete = ()=>resolve();
+    tx.onerror = ()=>reject(tx.error);
+  });
+}
+async function idbGetAll(){
+  const d = await idbOpen();
+  return new Promise((resolve,reject)=>{
+    const tx = d.transaction(IDB_STORE,'readonly');
+    const req = tx.objectStore(IDB_STORE).getAll();
+    req.onsuccess = ()=>resolve(req.result.sort((a,b)=>b.ts-a.ts));
+    req.onerror = ()=>reject(req.error);
+  });
+}
+async function idbDelete(ts){
+  const d = await idbOpen();
+  return new Promise((resolve,reject)=>{
+    const tx = d.transaction(IDB_STORE,'readwrite');
+    tx.objectStore(IDB_STORE).delete(ts);
+    tx.oncomplete = ()=>resolve();
+    tx.onerror = ()=>reject(tx.error);
+  });
+}
+async function trimHistory(){
+  const all = await idbGetAll();
+  if(all.length > MAX_SNAPSHOTS){
+    const toRemove = all.slice(MAX_SNAPSHOTS);
+    for(const s of toRemove) await idbDelete(s.ts);
+  }
+}
+
+// ---------- helpers ----------
+function countOf(val){
+  if(Array.isArray(val)) return val.length;
+  if(val && typeof val === 'object') return Object.keys(val).length;
+  if(val === null || val === undefined || val === '') return 0;
+  return 1;
+}
+function timeAgo(ts){
+  const s = Math.floor((Date.now()-ts)/1000);
+  if(s<60) return 'just now';
+  if(s<3600) return Math.floor(s/60)+'m ago';
+  if(s<86400) return Math.floor(s/3600)+'h ago';
+  return Math.floor(s/86400)+'d ago';
+}
+function fmtTime(ts){
+  const d = new Date(ts);
+  return d.toLocaleString('en-IN', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
+}
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2400);
+}
+function downloadJSON(obj, filename){
+  const blob = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ---------- Local Storage backup (this device / this origin) ----------
+// NOTE: localStorage is origin-scoped. This only sees data if Guardian is hosted
+// on the SAME domain as the ERP (e.g. same GitHub Pages site) — different path is fine.
+function snapshotLocalStorage(){
+  const obj = {};
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      if(k === null) continue;
+      obj[k] = localStorage.getItem(k);
+    }
+  }catch(e){ console.error('localStorage read failed', e); }
+  return obj;
+}
+function prettyLsValue(raw){
+  try{ return JSON.stringify(JSON.parse(raw), null, 2); }
+  catch(e){ return raw; }
+}
+
+// Keys we watch for shrink-alerts (the ones that hold real records)
+const WATCH_KEYS = ['students','users','teacher_requests','role_requests','watemps'];
+
+// ---------- core: pull live data from Firestore ----------
+async function fetchLiveData(){
+  const snap = await db.collection('rsga_erp').get();
+  const data = {};
+  snap.forEach(doc=>{
+    const d = doc.data();
+    data[doc.id] = ('value' in d) ? d.value : d;
+  });
+  return data;
+}
+
+async function backupNow(silent){
+  const btn = document.getElementById('backupNowBtn');
+  btn.disabled = true; btn.textContent = '⟳ Watching…';
+  try{
+    const data = await fetchLiveData();
+    const counts = {};
+    Object.keys(data).forEach(k=> counts[k] = countOf(data[k]));
+
+    // Compare against the permanent golden baseline (never against just the last snapshot).
+    // This guarantees the alert can't be masked by two bad reads in a row, and never
+    // "self-heals" to OK until the data actually recovers back to the golden peak.
+    const golden = await updateGoldenBaseline(counts, data);
+
+    let severity = 'ok';
+    let alerts = [];
+    WATCH_KEYS.forEach(k=>{
+      const baseline = golden[k]?.count ?? null;
+      const after = counts[k] ?? 0;
+      if(baseline !== null && baseline > 0 && after < baseline){
+        const pctDrop = ((baseline-after)/baseline*100).toFixed(0);
+        if(after === 0){
+          severity = 'danger';
+          alerts.push(`"${k}" is at 0 records — golden baseline was ${baseline}. Looks like a full wipe.`);
+        } else if(pctDrop >= 20){
+          severity = 'danger';
+          alerts.push(`"${k}" is at ${after}, down from golden baseline ${baseline} (−${pctDrop}%).`);
+        } else {
+          if(severity === 'ok') severity = 'warn';
+          alerts.push(`"${k}" is at ${after}, slightly below golden baseline ${baseline}.`);
+        }
+      }
+    });
+
+    const snapObj = { ts: Date.now(), data, counts, severity, alerts, localStorage: snapshotLocalStorage() };
+    await idbPut(snapObj);
+    await trimHistory();
+    await render();
+    if(!silent) showToast(severity==='ok' ? 'Backup saved — all counts steady or growing.' : 'Backup saved — check the alert above.');
+  }catch(e){
+    console.error(e);
+    if(!silent) showToast('Could not reach Firestore. Check your internet connection.');
+    document.getElementById('statusTitle').textContent = 'Could not reach live data';
+    document.getElementById('statusSub').textContent = e.message || 'Network error';
+    document.getElementById('statusDot').className = 'pulse-dot warn';
+  }finally{
+    btn.disabled = false; btn.textContent = '⟳ Backup now';
+  }
+}
+
+// ---------- render ----------
+async function render(){
+  const history = await idbGetAll();
+  const dot = document.getElementById('statusDot');
+  const title = document.getElementById('statusTitle');
+  const sub = document.getElementById('statusSub');
+  const timeEl = document.getElementById('lastBackupTime');
+  const alertBanner = document.getElementById('alertBanner');
+  const countsGrid = document.getElementById('countsGrid');
+  const timeline = document.getElementById('timeline');
+  const histCount = document.getElementById('histCount');
+
+  if(history.length === 0){
+    title.textContent = 'No backups yet';
+    sub.textContent = 'Tap "Backup now" to take the first snapshot';
+    dot.className = 'pulse-dot warn';
+    timeEl.textContent = '—';
+    countsGrid.innerHTML = `<div class="count-tile"><div class="k">No data yet</div><div class="v">—</div></div>`;
+    timeline.innerHTML = `<div class="empty">No backups saved on this device yet.<br>Tap "Backup now" to take the first snapshot.</div>`;
+    histCount.textContent = '';
+    return;
+  }
+
+  const latest = history[0];
+  timeEl.textContent = fmtTime(latest.ts).split(',')[1]?.trim() || fmtTime(latest.ts);
+  dot.className = 'pulse-dot ' + latest.severity;
+
+  if(latest.severity === 'ok'){
+    title.textContent = 'All watched counts steady';
+    sub.textContent = `Last checked ${timeAgo(latest.ts)}`;
+    alertBanner.style.display = 'none';
+  } else {
+    title.textContent = latest.severity === 'danger' ? 'Possible data loss detected' : 'Minor drop detected';
+    sub.textContent = `Last checked ${timeAgo(latest.ts)}`;
+    alertBanner.style.display = 'block';
+    alertBanner.innerHTML = `<b>${latest.severity==='danger'?'⚠ Alert':'Notice'}:</b> ` + latest.alerts.join(' ');
+  }
+
+  // counts grid — compare to previous snapshot, and show the pinned golden baseline
+  const prev = history[1];
+  const goldenMap = await idbGetAllGolden();
+  countsGrid.innerHTML = '';
+  const keys = Object.keys(latest.counts).sort();
+  keys.forEach(k=>{
+    const v = latest.counts[k];
+    const pv = prev ? (prev.counts[k] ?? null) : null;
+    let dClass='flat', dText='—';
+    if(pv !== null){
+      if(v > pv){dClass='up'; dText=`↑ +${v-pv} since last`;}
+      else if(v < pv){dClass='down'; dText=`↓ −${pv-v} since last`;}
+      else {dClass='flat'; dText='no change';}
+    }
+    const g = goldenMap[k];
+    const goldenText = g ? `🏆 golden: ${g.count}` : '';
+    const belowGolden = g && v < g.count;
+    countsGrid.innerHTML += `
+      <div class="count-tile">
+        <div class="k mono">${k}</div>
+        <div class="v">${v}</div>
+        <div class="d ${dClass}">${dText}</div>
+        ${g ? `<div class="d ${belowGolden?'down':'flat'}" style="margin-top:2px;">${goldenText}</div>` : ''}
+      </div>`;
+  });
+
+  // local storage backup card
+  const lsCard = document.getElementById('lsCard');
+  const ls = latest.localStorage || {};
+  const lsKeys = Object.keys(ls);
+  if(lsKeys.length === 0){
+    lsCard.innerHTML = `<div class="empty" style="padding:20px;">No localStorage keys found on this origin.<br>Open Guardian from the same domain as the ERP to capture it.</div>`;
+  }else{
+    lsCard.innerHTML = `
+      <div class="snap-top">
+        <div class="snap-time">${lsKeys.length} key(s) captured</div>
+        <div class="snap-ago mono">${timeAgo(latest.ts)}</div>
+      </div>
+      <div class="snap-counts">${lsKeys.slice(0,8).map(k=>`<span class="mono">${k}</span>`).join('')}${lsKeys.length>8?`<span>+${lsKeys.length-8} more</span>`:''}</div>
+      <div class="snap-actions">
+        <button class="mini-btn" onclick="viewLocalStorage(${latest.ts})">View keys</button>
+        <button class="mini-btn" onclick="downloadLocalStorage(${latest.ts})">Download</button>
+        <button class="mini-btn" onclick="restoreLocalStorage(${latest.ts})" style="color:var(--warn);">Restore this</button>
+      </div>`;
+  }
+
+  // timeline
+  histCount.textContent = `(${history.length} saved, showing latest ${Math.min(history.length,20)})`;
+  timeline.innerHTML = '';
+  history.slice(0,20).forEach(snap=>{
+    const totalRecords = WATCH_KEYS.reduce((sum,k)=> sum + (snap.counts[k]||0), 0);
+    timeline.innerHTML += `
+      <div class="snap">
+        <div class="snap-node ${snap.severity}"></div>
+        <div class="snap-card">
+          <div class="snap-top">
+            <div class="snap-time">${fmtTime(snap.ts)}</div>
+            <div class="snap-ago mono">${timeAgo(snap.ts)}</div>
+          </div>
+          <div class="snap-counts">
+            ${WATCH_KEYS.map(k=>`<span>${k}: <b>${snap.counts[k]??0}</b></span>`).join('')}
+          </div>
+          <div class="snap-actions">
+            <button class="mini-btn" onclick="viewSnapshot(${snap.ts})">View JSON</button>
+            <button class="mini-btn" onclick="downloadSnapshot(${snap.ts})">Download</button>
+          </div>
+        </div>
+      </div>`;
+  });
+}
+
+// ---------- modal ----------
+let currentSnapshots = [];
+async function viewSnapshot(ts){
+  const history = await idbGetAll();
+  const snap = history.find(s=>s.ts===ts);
+  if(!snap) return;
+  document.getElementById('modalTitle').textContent = 'Snapshot — ' + fmtTime(ts);
+  document.getElementById('modalPre').textContent = JSON.stringify(snap.data, null, 2);
+  document.getElementById('modalBg').classList.add('show');
+  document.getElementById('modalCopy').onclick = ()=>{
+    navigator.clipboard.writeText(JSON.stringify(snap.data, null, 2))
+      .then(()=>showToast('Copied to clipboard'))
+      .catch(()=>showToast('Copy failed — select the text manually'));
+  };
+  document.getElementById('modalDownload').onclick = ()=>{
+    downloadJSON(snap.data, `rsga-backup-${ts}.json`);
+  };
+}
+async function downloadSnapshot(ts){
+  const history = await idbGetAll();
+  const snap = history.find(s=>s.ts===ts);
+  if(!snap) return;
+  downloadJSON(snap.data, `rsga-backup-${ts}.json`);
+}
+document.getElementById('modalClose').onclick = ()=> document.getElementById('modalBg').classList.remove('show');
+document.getElementById('modalBg').onclick = (e)=>{ if(e.target.id==='modalBg') e.target.classList.remove('show'); };
+
+// ---------- local storage backup: view / download / restore ----------
+async function viewLocalStorage(ts){
+  const history = await idbGetAll();
+  const snap = history.find(s=>s.ts===ts);
+  if(!snap || !snap.localStorage) return;
+  const ls = snap.localStorage;
+  const pretty = Object.keys(ls).sort().map(k=> `— ${k} —\n${prettyLsValue(ls[k])}`).join('\n\n');
+  document.getElementById('modalTitle').textContent = 'localStorage — ' + fmtTime(ts);
+  document.getElementById('modalPre').textContent = pretty || '(empty)';
+  document.getElementById('modalBg').classList.add('show');
+  document.getElementById('modalCopy').onclick = ()=>{
+    navigator.clipboard.writeText(JSON.stringify(ls, null, 2))
+      .then(()=>showToast('Copied to clipboard'))
+      .catch(()=>showToast('Copy failed — select the text manually'));
+  };
+  document.getElementById('modalDownload').onclick = ()=>{
+    downloadJSON(ls, `rsga-localstorage-${ts}.json`);
+  };
+}
+async function downloadLocalStorage(ts){
+  const history = await idbGetAll();
+  const snap = history.find(s=>s.ts===ts);
+  if(!snap || !snap.localStorage) return;
+  downloadJSON(snap.localStorage, `rsga-localstorage-${ts}.json`);
+}
+async function restoreLocalStorage(ts){
+  const history = await idbGetAll();
+  const snap = history.find(s=>s.ts===ts);
+  if(!snap || !snap.localStorage){ showToast('No localStorage backup found for this snapshot'); return; }
+  const keys = Object.keys(snap.localStorage);
+  if(keys.length === 0){ showToast('That backup has no localStorage keys'); return; }
+  const ok = confirm(
+    `Restore ${keys.length} localStorage key(s) from the ${fmtTime(ts)} backup?\n\n` +
+    `This will overwrite matching keys in this browser's current localStorage on this device. ` +
+    `Keys not in the backup are left untouched. This does not affect Firestore.`
+  );
+  if(!ok) return;
+  try{
+    keys.forEach(k=> localStorage.setItem(k, snap.localStorage[k]));
+    showToast(`Restored ${keys.length} localStorage key(s). Reload the ERP tab to see it take effect.`);
+  }catch(e){
+    console.error(e);
+    showToast('Restore failed — see console for details.');
+  }
+}
+
+// ---------- buttons ----------
+document.getElementById('backupNowBtn').onclick = ()=> backupNow(false);
+document.getElementById('exportAllBtn').onclick = async ()=>{
+  const history = await idbGetAll();
+  if(history.length===0){ showToast('No backups saved yet'); return; }
+  downloadJSON(history, `rsga-guardian-history-${Date.now()}.json`);
+  showToast(`Exported ${history.length} snapshot(s)`);
+};
+
+// ---------- init ----------
+(async function init(){
+  await render();
+  await backupNow(true); // silent auto-backup on open
+})();
+</script>
+</body>
+</html>
